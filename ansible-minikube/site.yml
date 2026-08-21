@@ -1,0 +1,8 @@
+---
+- name: Prepare Minikube host
+  hosts: minikube_lab
+  become: false
+  gather_facts: true
+
+  roles:
+    - role: minikube_setup

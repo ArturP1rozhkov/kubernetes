@@ -1,0 +1,110 @@
+---
+- name: Install base dependencies
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - conntrack
+    state: present
+    update_cache: true
+  become: true
+
+- name: Ensure keyrings directory exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+  become: true
+
+- name: Download Docker GPG key
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    dest: /etc/apt/keyrings/docker.asc
+    mode: "0644"
+  become: true
+
+- name: Get OS codename
+  ansible.builtin.command: bash -c ". /etc/os-release && echo $VERSION_CODENAME"
+  register: minikube_setup_minikube_setup_os_codename
+  changed_when: false
+
+- name: Add Docker APT repository
+  ansible.builtin.deb822_repository:
+    name: docker
+    types: deb
+    uris: https://download.docker.com/linux/ubuntu
+    suites: "{{ minikube_setup_os_codename.stdout }}"
+    components: stable
+    signed_by: /etc/apt/keyrings/docker.asc
+    state: present
+  become: true
+
+- name: Install Docker packages
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+    update_cache: true
+  become: true
+  notify: Enable docker service
+
+- name: Add remote user to docker group
+  ansible.builtin.user:
+    name: "{{ ansible_user }}"
+    groups: docker
+    append: true
+  become: true
+  notify: Reset SSH connection
+
+- name: Check if kubectl is already installed
+  ansible.builtin.stat:
+    path: /usr/local/bin/kubectl
+  register: minikube_setup_kubectl_bin
+
+- name: Get latest stable kubectl version
+  ansible.builtin.uri:
+    url: "{{ minikube_setup_kubectl_download_url }}/stable.txt"
+    return_content: true
+  register: minikube_setup_kubectl_version
+  when: not minikube_setup_kubectl_bin.stat.exists
+
+- name: Download kubectl binary
+  ansible.builtin.get_url:
+    url: "{{ minikube_setup_kubectl_download_url }}/{{ minikube_setup_kubectl_version.content }}/bin/linux/amd64/kubectl"
+    dest: /usr/local/bin/kubectl
+    mode: "0755"
+  become: true
+  when: not minikube_setup_kubectl_bin.stat.exists
+
+- name: Check if minikube is already installed
+  ansible.builtin.stat:
+    path: /usr/local/bin/minikube
+  register: minikube_setup_minikube_bin
+
+- name: Download minikube binary
+  ansible.builtin.get_url:
+    url: "{{ minikube_setup_download_url }}"
+    dest: /usr/local/bin/minikube
+    mode: "0755"
+  become: true
+  when: not minikube_setup_minikube_bin.stat.exists
+
+- name: Start minikube cluster
+  ansible.builtin.command: >
+    minikube start
+    --driver={{ minikube_setup_driver }}
+    --cpus={{ minikube_setup_cpus }}
+    --memory={{ minikube_setup_memory }}
+    --disk-size={{ minikube_setup_disk_size }}
+  register: minikube_setup_start_result
+  changed_when: "'Done!' in minikube_setup_start_result.stdout"
+
+- name: Enable minikube addons
+  ansible.builtin.command: "minikube addons enable {{ item }}"
+  loop: "{{ minikube_setup_addons }}"
+  register: minikube_setup_addon_result
+  changed_when: "'already enabled' not in minikube_setup_addon_result.stdout"

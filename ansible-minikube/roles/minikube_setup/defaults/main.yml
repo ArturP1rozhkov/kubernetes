@@ -1,0 +1,13 @@
+---
+minikube_setup_cpus: 2
+minikube_setup_memory: "3072mb"
+minikube_setup_disk_size: "20g"
+minikube_setup_driver: docker
+
+minikube_setup_kubectl_download_url: https://dl.k8s.io/release
+minikube_setup_download_url: https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+
+minikube_setup_addons:
+  - ingress
+  - dashboard
+  - metrics-server
